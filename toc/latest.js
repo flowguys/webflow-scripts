@@ -9,7 +9,7 @@
 
   // --- Gather templates by depth ---
   const linkTemplates = [];
-  let current = listRoot.querySelector('[toc="link"]'); 
+  let current = listRoot.querySelector('[toc="link"]');
   while (current) {
     linkTemplates.push(current);
     current = current.querySelector(':scope > [toc="link"]');
@@ -53,6 +53,30 @@
     return unique;
   };
 
+  // --- Parse offset value to px ---
+  const getOffset = () => {
+    const attr = contentRoot.getAttribute("toc-offset");
+    if (attr) {
+      const num = parseFloat(attr);
+      if (attr.endsWith("rem")) {
+        return num * parseFloat(getComputedStyle(document.documentElement).fontSize);
+      }
+      return num;
+    }
+    return parseFloat(getComputedStyle(document.documentElement).fontSize) * 5;
+  };
+
+  // --- Apply offset padding/margin to each heading ---
+  // Preserves any existing padding-top and margin-top so layout is unaffected
+  const applyHeadingOffset = (heading) => {
+    const computed = getComputedStyle(heading);
+    const existingPadding = parseFloat(computed.paddingTop) || 0;
+    const existingMargin = parseFloat(computed.marginTop) || 0;
+    const offset = getOffset();
+    heading.style.setProperty("padding-top", (existingPadding + offset) + "px", "important");
+    heading.style.setProperty("margin-top", (existingMargin - offset) + "px", "important");
+  };
+
   // --- Build a template clone for a given 0-based depth ---
   const buildNode = (depth, headingEl, uniqueId) => {
     const templateDepth = Math.min(depth, maxDepth - 1);
@@ -81,6 +105,7 @@
     const baseId = slugify(heading.textContent);
     const uniqueId = makeUniqueId(baseId);
     heading.id = uniqueId;
+    applyHeadingOffset(heading);
     const depth = relativeDepth(heading);
     const node = buildNode(depth, heading, uniqueId);
 
@@ -153,18 +178,6 @@
   const linkMap = new Map(entries.map(({ uniqueId, node }) => [uniqueId, node]));
   const ancestorMap = new Map(entries.map(({ uniqueId, ancestors }) => [uniqueId, ancestors]));
 
-  const getOffset = () => {
-    const attr = contentRoot.getAttribute("toc-offset");
-    if (attr) {
-      const num = parseFloat(attr);
-      if (attr.endsWith("rem")) {
-        return num * parseFloat(getComputedStyle(document.documentElement).fontSize);
-      }
-      return num;
-    }
-    return parseFloat(getComputedStyle(document.documentElement).fontSize) * 5;
-  };
-
   let offsetPx = getOffset();
   window.addEventListener("resize", () => {
     offsetPx = getOffset();
@@ -174,11 +187,13 @@
 
   let activeId = null;
 
-  function updateActive() {
-    const triggerLine = offsetPx;
+function updateActive() {
     let current = headings[0]?.id || null;
     headings.forEach((heading) => {
-      if (heading.getBoundingClientRect().top - triggerLine <= 0) {
+      const measuredEl = (heading.parentNode && heading.parentNode !== contentRoot)
+        ? heading.parentNode
+        : heading;
+      if (measuredEl.getBoundingClientRect().top <= 2) {
         current = heading.id;
       }
     });
